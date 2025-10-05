@@ -1,0 +1,266 @@
+<?php
+
+namespace Database\Seeders;
+
+use Illuminate\Database\Seeder;
+use App\Models\Client;
+use App\Models\CaseModel;
+use App\Models\Hearing;
+use App\Models\Invoice;
+use App\Models\User;
+use Carbon\Carbon;
+
+class DatabaseSeeder extends Seeder
+{
+    public function run(): void
+    {
+        // 🧱 استدعاء Seeders بالترتيب الصحيح
+        $this->call([
+            RoleAndPermissionSeeder::class,  // أولاً: لإنشاء الأدوار والصلاحيات
+            UserSeeder::class,               // ثانياً: لإنشاء المستخدمين وتعيين الأدوار
+            ClientSeeder::class,
+            DocumentTemplatesSeeder::class,
+        ]);
+
+        // 🧍‍♂️ جلب المستخدم الإداري (الأول)
+        $admin = User::first();
+        $adminId = $admin ? $admin->id : 1;
+
+        // ⚖️ إنشاء قضايا تجريبية
+        $this->createSampleCases($adminId);
+    }
+
+    private function createSampleCases($adminId)
+    {
+        // 🧾 جلب أو إنشاء بعض العملاء
+        $clients = Client::take(3)->get();
+
+        if ($clients->isEmpty()) {
+            $clients = collect([
+                Client::create([
+                    'name' => 'أحمد محمد العلي',
+                    'national_id' => '1234567890',
+                    'phone' => '0501234567',
+                    'email' => 'ahmed@example.com',
+                    'address' => 'الرياض، حي النخيل',
+                    'created_by' => $adminId,
+                ]),
+                Client::create([
+                    'name' => 'فاطمة عبدالله السعد',
+                    'national_id' => '0987654321',
+                    'phone' => '0509876543',
+                    'email' => 'fatima@example.com',
+                    'address' => 'جدة، حي الروضة',
+                    'created_by' => $adminId,
+                ]),
+                Client::create([
+                    'name' => 'شركة التقنية المتطورة',
+                    'national_id' => '1122334455',
+                    'phone' => '0501122334',
+                    'email' => 'info@tech.com',
+                    'address' => 'الدمام، الحي التجاري',
+                    'created_by' => $adminId,
+                ]),
+            ]);
+        }
+
+        // ⚖️ بيانات القضايا
+        $casesData = [
+            [
+                'case_number' => 'CASE-2024-0001',
+                'case_title' => 'نزاع ملكية عقارية',
+                'case_summary' => 'قضية عقارية تتعلق بنزاع ملكية بين الطرفين حول قطعة أرض في الرياض',
+                'case_type' => 'real_estate',
+                'status' => 'active',
+                'priority' => 'high',
+                'fees_received' => 15000.00,
+                'fees_pending' => 5000.00,
+                'total_fees' => 20000.00,
+                'court_name' => 'المحكمة العامة بالرياض',
+                'court_type' => 'general',
+                'opposing_party' => 'شركة الأملاك المتحدة',
+                'start_date' => Carbon::now()->subDays(30),
+                'expected_end_date' => Carbon::now()->addDays(90),
+                'next_hearing_date' => Carbon::now()->addDays(14),
+                'next_hearing_time' => '10:30:00',
+                'fee_type' => 'fixed',
+                'case_value' => 500000.00,
+                'is_active' => true,
+            ],
+            [
+                'case_number' => 'CASE-2024-0002',
+                'case_title' => 'قضية نفقة وحضانة',
+                'case_summary' => 'قضية أحوال شخصية تتعلق بطلب نفقة وحضانة الأطفال',
+                'case_type' => 'family',
+                'status' => 'active',
+                'priority' => 'medium',
+                'fees_received' => 8000.00,
+                'fees_pending' => 2000.00,
+                'total_fees' => 10000.00,
+                'court_name' => 'محكمة الأحوال الشخصية',
+                'court_type' => 'family',
+                'opposing_party' => 'خالد أحمد النوري',
+                'start_date' => Carbon::now()->subDays(15),
+                'expected_end_date' => Carbon::now()->addDays(60),
+                'next_hearing_date' => Carbon::now()->addDays(7),
+                'next_hearing_time' => '09:00:00',
+                'fee_type' => 'fixed',
+                'case_value' => 50000.00,
+                'is_active' => true,
+            ],
+            [
+                'case_number' => 'CASE-2024-0003',
+                'case_title' => 'نزاع تجاري - عقد توريد',
+                'case_summary' => 'نزاع تجاري حول عقد توريد معدات تقنية مع شركة منافسة',
+                'case_type' => 'commercial',
+                'status' => 'completed',
+                'priority' => 'low',
+                'fees_received' => 25000.00,
+                'fees_pending' => 0.00,
+                'total_fees' => 25000.00,
+                'court_name' => 'المحكمة التجارية',
+                'court_type' => 'commercial',
+                'opposing_party' => 'مؤسسة الحلول التقنية',
+                'start_date' => Carbon::now()->subDays(120),
+                'expected_end_date' => Carbon::now()->subDays(30),
+                'actual_end_date' => Carbon::now()->subDays(30),
+                'fee_type' => 'percentage',
+                'fee_percentage' => 10.00,
+                'case_value' => 250000.00,
+                'result' => 'تم الحكم لصالح الموكل بالتعويض المطلوب',
+                'is_active' => false,
+            ],
+        ];
+
+        // ⏳ إنشاء القضايا + الجلسات + الفواتير
+        foreach ($casesData as $index => $caseData) {
+            $client = $clients[$index];
+
+            $caseData['client_id'] = $client->id;
+            $caseData['client_name'] = $client->name;
+            $caseData['client_phone'] = $client->phone;
+            $caseData['created_by'] = $adminId;
+            $caseData['user_id'] = $adminId;
+
+            $case = CaseModel::create($caseData);
+
+            $this->createHearingsForCase($case, $adminId);
+            $this->createInvoicesForCase($case, $client, $adminId);
+        }
+    }
+
+    private function createHearingsForCase($case, $adminId)
+    {
+        $hearings = [];
+
+        if ($case->status === 'active') {
+            // جلسة ماضية مكتملة
+            $hearings[] = [
+                'case_id' => $case->id,
+                'hearing_date' => Carbon::now()->subDays(7),
+                'hearing_time' => '09:00:00',
+                'title' => 'الجلسة الأولى',
+                'description' => 'جلسة افتتاحية للاطلاع على الدعوى',
+                'court_name' => $case->court_name,
+                'court_room' => 'القاعة الأولى',
+                'hearing_type' => 'initial',
+                'status' => 'completed',
+                'result' => 'تم تأجيل الجلسة لحين إحضار مستندات إضافية',
+                'notes' => 'تم التأجيل لجمع المستندات المطلوبة',
+                'completed_at' => Carbon::now()->subDays(7)->addHours(2),
+                'created_by' => $adminId,
+            ];
+
+            // جلسة قادمة
+            $hearings[] = [
+                'case_id' => $case->id,
+                'hearing_date' => $case->next_hearing_date,
+                'hearing_time' => $case->next_hearing_time,
+                'title' => 'جلسة المتابعة',
+                'description' => 'جلسة للنظر في المستندات المقدمة',
+                'court_name' => $case->court_name,
+                'court_room' => 'القاعة الثانية',
+                'hearing_type' => 'evidence',
+                'status' => 'scheduled',
+                'notes' => 'يرجى إحضار جميع المستندات المطلوبة',
+                'created_by' => $adminId,
+            ];
+        } else {
+            // جلسة ختامية للقضية المنتهية
+            $hearings[] = [
+                'case_id' => $case->id,
+                'hearing_date' => Carbon::now()->subDays(45),
+                'hearing_time' => '11:00:00',
+                'title' => 'الجلسة الختامية',
+                'description' => 'جلسة إصدار الحكم النهائي',
+                'court_name' => $case->court_name,
+                'court_room' => 'القاعة الرئيسية',
+                'hearing_type' => 'judgment',
+                'status' => 'completed',
+                'result' => 'صدر الحكم لصالح الموكل',
+                'notes' => 'صدر الحكم لصالح الموكل بكامل المطالبة',
+                'completed_at' => Carbon::now()->subDays(45)->addHours(2),
+                'created_by' => $adminId,
+            ];
+        }
+
+        foreach ($hearings as $hearingData) {
+            Hearing::create($hearingData);
+        }
+    }
+
+    private function createInvoicesForCase($case, $client, $adminId)
+    {
+        // 💰 فاتورة مدفوعة للمبلغ المستلم
+        if ($case->fees_received > 0) {
+            $invoice1 = Invoice::create([
+                'invoice_number' => 'INV-2024-' . str_pad($case->id * 2 - 1, 4, '0', STR_PAD_LEFT),
+                'case_id' => $case->id,
+                'client_name' => $client->name,
+                'invoice_date' => $case->start_date,
+                'due_date' => $case->start_date->copy()->addDays(30),
+                'description' => "الدفعة الأولى من أتعاب قضية: {$case->case_number}",
+                'amount' => $case->fees_received,
+                'tax_amount' => $case->fees_received * 0.15,
+                'total_amount' => $case->fees_received * 1.15,
+                'paid_amount' => $case->fees_received * 1.15,
+                'status' => 'paid',
+                'paid_at' => $case->start_date->copy()->addDays(5),
+                'created_by' => 'النظام',
+            ]);
+
+            $invoice1->items()->create([
+                'description' => 'أتعاب قانونية - الدفعة الأولى',
+                'quantity' => 1,
+                'unit_price' => $case->fees_received,
+                'total_price' => $case->fees_received,
+            ]);
+        }
+
+        // 🧾 فاتورة معلقة للمبلغ المتبقي
+        if ($case->fees_pending > 0) {
+            $invoice2 = Invoice::create([
+                'invoice_number' => 'INV-2024-' . str_pad($case->id * 2, 4, '0', STR_PAD_LEFT),
+                'case_id' => $case->id,
+                'client_name' => $client->name,
+                'invoice_date' => Carbon::now()->subDays(10),
+                'due_date' => Carbon::now()->addDays(20),
+                'description' => "الدفعة المتبقية من أتعاب قضية: {$case->case_number}",
+                'amount' => $case->fees_pending,
+                'tax_amount' => $case->fees_pending * 0.15,
+                'total_amount' => $case->fees_pending * 1.15,
+                'paid_amount' => 0,
+                'status' => 'pending',
+                'sent_at' => Carbon::now()->subDays(10),
+                'created_by' => 'النظام',
+            ]);
+
+            $invoice2->items()->create([
+                'description' => 'أتعاب قانونية - الدفعة المتبقية',
+                'quantity' => 1,
+                'unit_price' => $case->fees_pending,
+                'total_price' => $case->fees_pending,
+            ]);
+        }
+    }
+}
