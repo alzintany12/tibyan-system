@@ -1,7 +1,16 @@
-# Use the official PHP image with Apache
+# ================================
+# Dockerfile متقدم لمشروع Laravel
+# ================================
+
+# استخدم PHP 8.2 مع Apache
 FROM php:8.2-apache
 
-# Install system dependencies
+# تعيين مجلد العمل
+WORKDIR /var/www/html
+
+# ================================
+# تثبيت الاعتمادات الأساسية
+# ================================
 RUN apt-get update && apt-get install -y \
     git \
     unzip \
@@ -10,31 +19,37 @@ RUN apt-get update && apt-get install -y \
     libxml2-dev \
     zip \
     curl \
-    && docker-php-ext-install pdo_mysql mbstring exif pcntl bcmath gd
+    libzip-dev \
+    && docker-php-ext-install pdo_mysql mbstring exif pcntl bcmath gd zip
 
-# Enable Apache mod_rewrite
+# تمكين mod_rewrite للـ Apache
 RUN a2enmod rewrite
 
-# Set working directory
-WORKDIR /var/www/html
+# ضبط DocumentRoot على مجلد public
+RUN sed -i 's|DocumentRoot /var/www/html|DocumentRoot /var/www/html/public|' /etc/apache2/sites-available/000-default.conf
 
-# Copy composer from the official image
+# السماح بـ .htaccess
+RUN sed -i '/<Directory \/var\/www\/>/,/<\/Directory>/ s/AllowOverride None/AllowOverride All/' /etc/apache2/apache2.conf
+
+# نسخ Composer من الصورة الرسمية
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
-# Copy project files
+# ================================
+# نسخ المشروع وتثبيت Composer
+# ================================
 COPY . .
 
-# Install dependencies
-RUN composer install --no-dev --optimize-autoloader
+# تثبيت الاعتمادات PHP (Composer) بدون dev وتعجيل التحميل
+RUN composer install --no-dev --optimize-autoloader --prefer-dist --no-scripts
 
-# Set permissions for Laravel storage and bootstrap cache
-RUN chmod -R 775 storage bootstrap/cache
+# ================================
+# ضبط الصلاحيات اللازمة لمجلدات Laravel
+# ================================
+RUN chown -R www-data:www-data /var/www/html \
+    && chmod -R 775 storage bootstrap/cache public
 
-# Generate application key (optional if you already set APP_KEY)
-# RUN php artisan key:generate
-
-# Expose port 80 for Apache
+# تعيين Apache للعمل على المنفذ 80
 EXPOSE 80
 
-# Start Apache server
+# تشغيل Apache في الوضع الأمامي
 CMD ["apache2-foreground"]
