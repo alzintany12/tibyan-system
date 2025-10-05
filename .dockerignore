@@ -1,0 +1,8 @@
+.git
+node_modules
+vendor
+.env
+storage/*.key
+bootstrap/cache/*.php
+npm-debug.log
+yarn-error.log

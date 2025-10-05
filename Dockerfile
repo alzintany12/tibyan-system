@@ -1,16 +1,16 @@
 # ================================
-# Dockerfile متقدم لمشروع Laravel
+# Production-ready Dockerfile for Laravel (PHP 8.2 + Apache)
 # ================================
-
-# استخدم PHP 8.2 مع Apache
 FROM php:8.2-apache
 
-# تعيين مجلد العمل
+ARG APP_ENV=production
+ENV APP_ENV=${APP_ENV}
+
 WORKDIR /var/www/html
 
-# ================================
-# تثبيت الاعتمادات الأساسية
-# ================================
+# ----------------
+# System packages & PHP extensions
+# ----------------
 RUN apt-get update && apt-get install -y \
     git \
     unzip \
@@ -20,36 +20,51 @@ RUN apt-get update && apt-get install -y \
     zip \
     curl \
     libzip-dev \
-    && docker-php-ext-install pdo_mysql mbstring exif pcntl bcmath gd zip
+    procps \
+    && docker-php-ext-install pdo_mysql mbstring exif pcntl bcmath gd zip \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# تمكين mod_rewrite للـ Apache
-RUN a2enmod rewrite
+# Enable Apache modules
+RUN a2enmod rewrite headers
 
-# ضبط DocumentRoot على مجلد public
-RUN sed -i 's|DocumentRoot /var/www/html|DocumentRoot /var/www/html/public|' /etc/apache2/sites-available/000-default.conf
+# Set DocumentRoot to public
+RUN sed -i 's|DocumentRoot /var/www/html|DocumentRoot /var/www/html/public|' /etc/apache2/sites-available/000-default.conf \
+ && sed -i '/<Directory \/var\/www\/>/,/<\/Directory>/ s/AllowOverride None/AllowOverride All/' /etc/apache2/apache2.conf
 
-# السماح بـ .htaccess
-RUN sed -i '/<Directory \/var\/www\/>/,/<\/Directory>/ s/AllowOverride None/AllowOverride All/' /etc/apache2/apache2.conf
-
-# نسخ Composer من الصورة الرسمية
+# Copy composer binary from official composer image
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
-# ================================
-# نسخ المشروع وتثبيت Composer
-# ================================
-COPY . .
+# Copy only composer files first (to use docker cache)
+COPY composer.json composer.lock /var/www/html/
 
-# تثبيت الاعتمادات PHP (Composer) بدون dev وتعجيل التحميل
-RUN composer install --no-dev --optimize-autoloader --prefer-dist --no-scripts
+# Install PHP dependencies (production - no dev)
+RUN composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader --no-scripts --no-progress
 
-# ================================
-# ضبط الصلاحيات اللازمة لمجلدات Laravel
-# ================================
+# Copy application source
+COPY . /var/www/html
+
+# Remove any prebuilt bootstrap cache (prevents Sail/other dev providers being loaded)
+RUN rm -f bootstrap/cache/services.php bootstrap/cache/packages.php bootstrap/cache/config.php || true
+
+# Ensure correct permissions
 RUN chown -R www-data:www-data /var/www/html \
-    && chmod -R 775 storage bootstrap/cache public
+    && chmod -R 775 storage bootstrap/cache \
+    && mkdir -p storage/logs
 
-# تعيين Apache للعمل على المنفذ 80
+# Clear possible caches (safe-guard)
+RUN php artisan config:clear || true \
+ && php artisan cache:clear || true \
+ && php artisan route:clear || true \
+ && php artisan view:clear || true
+
+# Optimize autoload
+RUN composer dump-autoload --optimize
+
+# Add entrypoint script
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
 EXPOSE 80
 
-# تشغيل Apache في الوضع الأمامي
+ENTRYPOINT ["docker-entrypoint.sh"]
 CMD ["apache2-foreground"]
